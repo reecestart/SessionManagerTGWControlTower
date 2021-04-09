@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 
 # Welcome to your CDK Python project!
 
@@ -56,3 +57,7 @@ command.
  * `cdk docs`        open CDK documentation
 
 Enjoy!
+=======
+# SessionManagerTGWControlTower
+Session Manager TGW Control Tower
+>>>>>>> 2ec5c88c376418f65fd763baf434f21a674286fd
