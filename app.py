@@ -74,39 +74,27 @@ class SessionManagerTgwControlTowerStack(core.Stack):
             ),
             secret_name="dbPassword"
         )
-        credentials=rds.Credentials.from_secret(dbPassword)
 
-        db = rds.DatabaseInstance(
-            self, "db",
-            database_name="db1",
-            engine=rds.DatabaseInstanceEngine.postgres(
-                version=rds.PostgresEngineVersion.VER_11_5
+        WindowsASG = autoscaling.AutoScalingGroup(
+            self, "WindowsASG",
+            instance_type=ec2.InstanceType.of(
+                ec2.InstanceClass.BURSTABLE3_AMD,
+                ec2.InstanceSize.SMALL
+            ),
+            machine_image=ec2.MachineImage.generic_windows(
+                ami_map={
+                    'ap-northeast-2': 'ami-0133b1a5b9ca9be36' #Windows
+                }
             ),
             vpc=vpc,
-            port=5432,
-            instance_type= ec2.InstanceType.of(
-                ec2.InstanceClass.STANDARD5,
-                ec2.InstanceSize.LARGE,
-            ),
-            removal_policy=core.RemovalPolicy.DESTROY,
-            deletion_protection=False,
-            multi_az=True,
-            publicly_accessible=False,
-            security_groups=[dbSecurityGroup],
-            subnet_group=dbSubnetGroup,
-            credentials=credentials,
-            enable_performance_insights=True
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE),
+            desired_capacity=1,
+            min_capacity=1,
+            max_capacity=2
         )
 
-        db.add_proxy(
-            "DBProxy",
-            vpc=vpc,
-            secrets=[dbPassword],
-            security_groups=[dbSecurityGroup]
-        )
-
-        RHELASG = autoscaling.AutoScalingGroup(
-            self, "RHELASG",
+        AppASG = autoscaling.AutoScalingGroup(
+            self, "AppASG",
             instance_type=ec2.InstanceType.of(
                 ec2.InstanceClass.BURSTABLE3_AMD,
                 ec2.InstanceSize.SMALL
@@ -114,7 +102,7 @@ class SessionManagerTgwControlTowerStack(core.Stack):
             machine_image=ec2.MachineImage.generic_linux(
                 ami_map={
                     'ap-southeast-2': 'ami-044c46b1952ad5861', #RHEL
-                    'ap-southeast-1': 'ami-0f86a70488991335e'
+                    'ap-northeast-2': 'ami-07464b2b9929898f8' #AMZLNX2
                 }
             ),
             vpc=vpc,
@@ -166,27 +154,49 @@ class SessionManagerTgwControlTowerStack(core.Stack):
             max_capacity=2
         )
 
-        RHELASG.node.add_dependency(db)
-
         dbSecurityGroup.connections.allow_from(
-            other=RHELASG,
+            other=AppASG,
             port_range=ec2.Port.tcp(5432),
             description="Allow pg connection from AppInstance"
         )
 
-        RHELASG.role.add_managed_policy(
+        AppASG.role.add_managed_policy(
             policy=iam.ManagedPolicy.from_aws_managed_policy_name(
                 managed_policy_name="AmazonSSMManagedInstanceCore"
             )
         )
 
-        RHELASG.role.add_managed_policy(
+        WindowsASG.role.add_managed_policy(
+            policy=iam.ManagedPolicy.from_aws_managed_policy_name(
+                managed_policy_name="AmazonSSMManagedInstanceCore"
+            )
+        )
+
+        AppASG.role.add_managed_policy(
             policy=iam.ManagedPolicy.from_aws_managed_policy_name(
                 managed_policy_name="AmazonRDSFullAccess"
             )
         )
 
-        RHELASG.role.add_managed_policy(
+        AppASG.role.add_managed_policy(
+            policy=iam.ManagedPolicy.from_aws_managed_policy_name(
+                managed_policy_name="AmazonEC2FullAccess "
+            )
+        )
+
+        WindowsASG.role.add_managed_policy(
+            policy=iam.ManagedPolicy.from_aws_managed_policy_name(
+                managed_policy_name="AmazonEC2FullAccess "
+            )
+        )
+
+        WindowsASG.role.add_managed_policy(
+            policy=iam.ManagedPolicy.from_aws_managed_policy_name(
+                managed_policy_name="SecretsManagerReadWrite "
+            )
+        )
+
+        AppASG.role.add_managed_policy(
             policy=iam.ManagedPolicy.from_aws_managed_policy_name(
                 managed_policy_name="SecretsManagerReadWrite"
             )
@@ -194,6 +204,13 @@ class SessionManagerTgwControlTowerStack(core.Stack):
 
         S3Endpoint = ec2.GatewayVpcEndpointAwsService(
             name="S3"
+        )
+
+        TransitGW = ec2.CfnTransitGateway(
+            self, "TransitGW",
+            auto_accept_shared_attachments="enable",
+            default_route_table_association="enable",
+            default_route_table_propagation="enable"
         )
 
 
