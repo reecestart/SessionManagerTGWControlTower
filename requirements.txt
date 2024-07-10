@@ -5,3 +5,4 @@ aws-cdk.aws-secretsmanager
 aws-cdk.aws-iam
 aws-cdk.aws-autoscaling
 aws-cdk.aws_glue
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
